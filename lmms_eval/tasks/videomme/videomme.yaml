@@ -1,4 +1,6 @@
-dataset_path: lmms-lab/Video-MME
+# dataset_path: lmms-lab/Video-MME
+dataset_path: /home/WuHao/datasets/lmms_eval_datasets/Video-MME
+dataset_name: videomme
 dataset_kwargs:
   token: True
   cache_dir: videomme

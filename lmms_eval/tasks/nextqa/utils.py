@@ -31,9 +31,19 @@ if config["metadata"]["load_package"]:
         from nltk.corpus import wordnet
         from nltk.tokenize import word_tokenize
 
-        nltk.download("averaged_perceptron_tagger", quiet=True)
-        nltk.download("wordnet", quiet=True)
-        nltk.download("punkt", quiet=True)
+        # nltk.set_proxy("http://127.0.0.1:6006")
+        def _ensure_nltk_resource(resource_path, package_name):
+            try:
+                nltk.data.find(resource_path)
+            except LookupError:
+                nltk.download(package_name, quiet=True)
+
+        _ensure_nltk_resource("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger")
+        _ensure_nltk_resource("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng")
+        _ensure_nltk_resource("corpora/wordnet", "wordnet")
+        _ensure_nltk_resource("corpora/omw-1.4", "omw-1.4")
+        _ensure_nltk_resource("tokenizers/punkt", "punkt")
+        _ensure_nltk_resource("tokenizers/punkt_tab", "punkt_tab")
     except ImportError:
         eval_logger.debug("nltk not installed. Please install nltk to use this module. You can install it by running 'pip install nltk'")
 

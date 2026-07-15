@@ -10,16 +10,47 @@ MMAR evaluates deep reasoning capabilities of Audio-Language Models across
 import random
 import re
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import soundfile as sf
 from loguru import logger as eval_logger
 
 DEFAULT_PRE_PROMPT = ""
 DEFAULT_POST_PROMPT = "The best answer is:"
+DEFAULT_AUDIO_CACHE_DIR = Path("/tmp/lmms_eval_audio_cache/mmar")
+DEFAULT_AUDIO_CACHE_SUBDIR = "_audio_cache"
 
 
-def mmar_doc_to_audio(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _audio_cache_dir(lmms_eval_specific_kwargs: Optional[Dict[str, Any]] = None) -> Path:
+    kwargs = lmms_eval_specific_kwargs or {}
+    configured_cache_dir = kwargs.get("audio_cache_dir")
+    if configured_cache_dir:
+        return Path(configured_cache_dir).expanduser()
+
+    dataset_path = kwargs.get("dataset_path")
+    if dataset_path:
+        dataset_dir = Path(dataset_path).expanduser()
+        if dataset_dir.is_absolute() or dataset_dir.exists():
+            return dataset_dir / kwargs.get("audio_cache_subdir", DEFAULT_AUDIO_CACHE_SUBDIR)
+
+    return DEFAULT_AUDIO_CACHE_DIR
+
+
+def _audio_cache_file(doc: Dict[str, Any], lmms_eval_specific_kwargs: Optional[Dict[str, Any]] = None) -> str:
+    audio = doc["audio"]
+    cache_dir = _audio_cache_dir(lmms_eval_specific_kwargs)
+    filename = Path(audio.get("path") or f"{doc.get('id', 'sample')}.wav").name
+    output_path = cache_dir / filename
+    if output_path.suffix.lower() != ".wav":
+        output_path = output_path.with_suffix(".wav")
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        sf.write(output_path, audio["array"], audio["sampling_rate"])
+    return str(output_path)
+
+def mmar_doc_to_audio(doc: Dict[str, Any], lmms_eval_specific_kwargs: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
     Extract audio from the document.
 
@@ -36,7 +67,7 @@ def mmar_doc_to_audio(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
     if audio is None:
         eval_logger.warning(f"No audio found for sample {doc.get('id', 'unknown')}")
         return []
-    return [audio]
+    return [{"type": "audio", "url": _audio_cache_file(doc, lmms_eval_specific_kwargs)}]
 
 
 def mmar_doc_to_text(doc: Dict[str, Any], lmms_eval_specific_kwargs: Optional[Dict[str, Any]] = None) -> str:

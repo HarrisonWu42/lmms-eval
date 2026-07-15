@@ -1,4 +1,5 @@
-dataset_path: ngqtrung/mmar
+# dataset_path: ngqtrung/mmar
+dataset_path: &dataset_path /home/WuHao/datasets/lmms_eval_datasets/mmar
 dataset_kwargs:
   token: true
 task: "mmar"
@@ -25,9 +26,13 @@ metric_list:
 
 lmms_eval_specific_kwargs:
   default:
+    dataset_path: *dataset_path
+    audio_cache_subdir: &audio_cache_subdir _audio_cache
     pre_prompt: ""
     post_prompt: "The best answer is:"
   qwen2_audio:
+    dataset_path: *dataset_path
+    audio_cache_subdir: *audio_cache_subdir
     pre_prompt: ""
     post_prompt: " <|en|>"
 

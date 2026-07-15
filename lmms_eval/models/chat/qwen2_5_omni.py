@@ -33,8 +33,7 @@ class Qwen2_5_Omni(ChatMixin, Qwen2_5_OmniSimple):
             video_kwargs=self.video_kwargs,
         )
 
-        # Audio/video are separate content blocks (silent MELD clips).
-        use_audio_in_video = False
+        use_audio_in_video = bool(self.use_audio_in_video)
 
         text = self.processor.apply_chat_template(hf_messages, add_generation_prompt=True, tokenize=False)
         audios, images, videos = process_mm_info(hf_messages, use_audio_in_video=use_audio_in_video)

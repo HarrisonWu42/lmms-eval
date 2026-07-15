@@ -1,4 +1,5 @@
-dataset_path: ngqtrung/mmsu
+# dataset_path: ngqtrung/mmsu
+dataset_path: &dataset_path /home/WuHao/datasets/lmms_eval_datasets/mmsu
 dataset_kwargs:
   token: True
 doc_to_target: "answer"
@@ -11,6 +12,8 @@ generation_kwargs:
 
 lmms_eval_specific_kwargs:
   default:
+    dataset_path: *dataset_path
+    audio_cache_subdir: _audio_cache
     pre_prompt: ""
     post_prompt: ""
 

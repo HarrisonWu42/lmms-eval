@@ -44,6 +44,7 @@ class Qwen2_5_Omni(lmms):
         attn_implementation: Optional[bool] = "eager",
         max_num_frames: int = 768,
         use_custom_video_loader: Optional[bool] = False,
+        use_audio_in_video: Optional[bool] = None,
         fps: Optional[float] = None,  # Only applicable if use_custom_video_loader is True
         max_image_size: Optional[int] = None,  # Only applicable if use_custom_video_loader is True
         system_prompt: str = "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
@@ -53,7 +54,19 @@ class Qwen2_5_Omni(lmms):
         # Do not use kwargs for now
         assert kwargs == {}, f"Unexpected kwargs: {kwargs}"
 
+        if isinstance(use_audio_in_video, str):
+            normalized_use_audio = use_audio_in_video.strip().lower()
+            if normalized_use_audio in {"true", "1", "yes"}:
+                use_audio_in_video = True
+            elif normalized_use_audio in {"false", "0", "no"}:
+                use_audio_in_video = False
+            elif normalized_use_audio in {"none", "auto"}:
+                use_audio_in_video = None
+            else:
+                raise ValueError(f"Invalid use_audio_in_video value: {use_audio_in_video}")
+
         self.use_custom_video_loader = use_custom_video_loader
+        self.use_audio_in_video = use_audio_in_video
         self.fps = fps
         # if self.fps and not self.use_custom_video_loader:
         #     raise ValueError("FPS is only applicable if use_custom_video_loader is True")
@@ -74,7 +87,7 @@ class Qwen2_5_Omni(lmms):
 
         Qwen2_5OmniForConditionalGeneration._tp_plan = [] if Qwen2_5OmniForConditionalGeneration._tp_plan is None else Qwen2_5OmniForConditionalGeneration._tp_plan
         self._model = Qwen2_5OmniForConditionalGeneration.from_pretrained(pretrained, torch_dtype="auto", device_map=self.device_map, attn_implementation=attn_implementation).eval()
-        self.processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        self.processor = Qwen2_5OmniProcessor.from_pretrained(pretrained)
         self.max_num_frames = max_num_frames
         self._tokenizer = self.processor.tokenizer
 
@@ -213,7 +226,10 @@ class Qwen2_5_Omni(lmms):
                 if len(visuals) > 0:
                     visual = visuals[i] if i < len(visuals) else None
                     if isinstance(visual, str) and visual.endswith((".mp4", ".avi", ".mov")):  # Video file
-                        current_use_audio = self._check_if_video_has_audio(visual)
+                        if self.use_audio_in_video is None:
+                            current_use_audio = self._check_if_video_has_audio(visual)
+                        else:
+                            current_use_audio = bool(self.use_audio_in_video)
                         if self.use_custom_video_loader:
                             frames = read_video(visual, num_frm=self.max_num_frames, fps=self.fps)
                             image_contents = []

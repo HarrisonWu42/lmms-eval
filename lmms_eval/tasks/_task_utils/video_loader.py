@@ -2,9 +2,16 @@ import os
 
 
 def get_cache_dir(config, sub_dir="videos"):
-    HF_HOME = os.environ["HF_HOME"]
+    dataset_path = config.get("dataset_path")
+    if dataset_path:
+        dataset_path = os.path.expanduser(dataset_path)
+        local_cache_dir = os.path.join(dataset_path, sub_dir)
+        if os.path.isdir(local_cache_dir):
+            return local_cache_dir
+
+    hf_home = os.environ.get("HF_HOME", "~/.cache/huggingface/")
     cache_dir = config["dataset_kwargs"]["cache_dir"]
-    cache_dir = os.path.join(HF_HOME, cache_dir)
+    cache_dir = os.path.join(os.path.expanduser(hf_home), cache_dir)
     cache_dir = os.path.join(cache_dir, sub_dir)
     return cache_dir
 

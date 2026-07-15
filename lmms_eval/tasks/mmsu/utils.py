@@ -7,16 +7,55 @@ tests spoken language understanding and reasoning across 47 tasks.
 
 import random
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
+import soundfile as sf
 from loguru import logger as eval_logger
 
+DEFAULT_AUDIO_CACHE_DIR = Path("/tmp/lmms_eval_audio_cache/mmsu")
+DEFAULT_AUDIO_CACHE_SUBDIR = "_audio_cache"
 
-def mmsu_doc_to_audio(doc):
+
+def _audio_cache_dir(lmms_eval_specific_kwargs=None):
+    kwargs = lmms_eval_specific_kwargs or {}
+    configured_cache_dir = kwargs.get("audio_cache_dir")
+    if configured_cache_dir:
+        return Path(configured_cache_dir).expanduser()
+
+    dataset_path = kwargs.get("dataset_path")
+    if dataset_path:
+        dataset_dir = Path(dataset_path).expanduser()
+        if dataset_dir.is_absolute() or dataset_dir.exists():
+            return dataset_dir / kwargs.get("audio_cache_subdir", DEFAULT_AUDIO_CACHE_SUBDIR)
+
+    return DEFAULT_AUDIO_CACHE_DIR
+
+
+def _audio_cache_file(audio, doc, lmms_eval_specific_kwargs=None):
+    cache_dir = _audio_cache_dir(lmms_eval_specific_kwargs)
+    filename = Path(audio.get("path") or f"{doc.get('id', 'sample')}.wav").name
+    output_path = cache_dir / filename
+    if output_path.suffix.lower() != ".wav":
+        output_path = output_path.with_suffix(".wav")
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        sf.write(output_path, np.asarray(audio["array"]), audio["sampling_rate"])
+    return str(output_path)
+
+
+def _audio_content(audio, doc, lmms_eval_specific_kwargs=None):
+    if isinstance(audio, dict) and "array" in audio and "sampling_rate" in audio:
+        return {"type": "audio", "url": _audio_cache_file(audio, doc, lmms_eval_specific_kwargs)}
+    return {"type": "audio", "url": audio}
+
+
+def mmsu_doc_to_audio(doc, lmms_eval_specific_kwargs=None):
     """Extract audio from document.
 
     Args:
         doc: Document dictionary containing audio data.
+        lmms_eval_specific_kwargs: Optional task-specific cache settings.
 
     Returns:
         List containing the audio data.
@@ -65,37 +104,34 @@ def mmsu_doc_to_audio(doc):
                         sampling_rate = audio_file._desired_sample_rate
 
                     audio_dict = {"array": audio_array, "sampling_rate": sampling_rate}
-                    return [audio_dict]
+                    return [_audio_content(audio_dict, doc, lmms_eval_specific_kwargs)]
                 elif hasattr(audio_file, "decode"):
                     decoded_audio = audio_file.decode()
                     if isinstance(decoded_audio, dict):
-                        return [decoded_audio]
+                        return [_audio_content(decoded_audio, doc, lmms_eval_specific_kwargs)]
                     elif hasattr(decoded_audio, "array") and hasattr(decoded_audio, "sampling_rate"):
-                        return [
-                            {
-                                "array": decoded_audio.array,
-                                "sampling_rate": decoded_audio.sampling_rate,
-                            }
-                        ]
+                        audio_dict = {
+                            "array": decoded_audio.array,
+                            "sampling_rate": decoded_audio.sampling_rate,
+                        }
+                        return [_audio_content(audio_dict, doc, lmms_eval_specific_kwargs)]
                 elif hasattr(audio_file, "__call__"):
                     decoded_audio = audio_file()
                     if isinstance(decoded_audio, dict):
-                        return [decoded_audio]
+                        return [_audio_content(decoded_audio, doc, lmms_eval_specific_kwargs)]
                     elif hasattr(decoded_audio, "array") and hasattr(decoded_audio, "sampling_rate"):
-                        return [
-                            {
-                                "array": decoded_audio.array,
-                                "sampling_rate": decoded_audio.sampling_rate,
-                            }
-                        ]
+                        audio_dict = {
+                            "array": decoded_audio.array,
+                            "sampling_rate": decoded_audio.sampling_rate,
+                        }
+                        return [_audio_content(audio_dict, doc, lmms_eval_specific_kwargs)]
                 else:
                     if hasattr(audio_file, "array") and hasattr(audio_file, "sampling_rate"):
-                        return [
-                            {
-                                "array": audio_file.array,
-                                "sampling_rate": audio_file.sampling_rate,
-                            }
-                        ]
+                        audio_dict = {
+                            "array": audio_file.array,
+                            "sampling_rate": audio_file.sampling_rate,
+                        }
+                        return [_audio_content(audio_dict, doc, lmms_eval_specific_kwargs)]
                     else:
                         return []
             except Exception as e:
@@ -103,14 +139,15 @@ def mmsu_doc_to_audio(doc):
                 return []
         elif hasattr(audio_file, "array") and hasattr(audio_file, "sampling_rate"):
             try:
-                return [{"array": audio_file.array, "sampling_rate": audio_file.sampling_rate}]
+                audio_dict = {"array": audio_file.array, "sampling_rate": audio_file.sampling_rate}
+                return [_audio_content(audio_dict, doc, lmms_eval_specific_kwargs)]
             except Exception as e:
                 eval_logger.error(f"Error converting audio object: {e}")
                 return []
         elif isinstance(audio_file, dict) and "array" in audio_file and "sampling_rate" in audio_file:
-            return [audio_file]
+            return [_audio_content(audio_file, doc, lmms_eval_specific_kwargs)]
         else:
-            return [audio_file]
+            return [_audio_content(audio_file, doc, lmms_eval_specific_kwargs)]
     else:
         eval_logger.warning(f"No audio file found in document. Available keys: {list(doc.keys())}")
         return []

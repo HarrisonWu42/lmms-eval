@@ -1,4 +1,5 @@
-dataset_path: lmms-lab/NExTQA
+# dataset_path: lmms-lab/NExTQA
+dataset_path: /home/WuHao/datasets/lmms_eval_datasets/NExTQA
 dataset_kwargs:
   token: True
   video: True

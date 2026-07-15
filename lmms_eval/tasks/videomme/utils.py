@@ -73,10 +73,6 @@ replace_prompt = " Please answer yes or no."
 
 #     config = yaml.safe_load("".join(safe_data))
 
-hf_home = os.getenv("HF_HOME", "~/.cache/huggingface/")
-# cache_dir = os.path.join(hf_home, cache_dir)
-# base_cache_dir = config["dataset_kwargs"]["cache_dir"]
-base_cache_dir = os.path.expanduser(hf_home)
 with open(Path(__file__).parent / "videomme.yaml", "r") as f:
     raw_data = f.readlines()
     safe_data = []
@@ -84,7 +80,28 @@ with open(Path(__file__).parent / "videomme.yaml", "r") as f:
         # remove function definition since yaml load cannot handle it
         if "!function" not in line:
             safe_data.append(line)
-cache_name = yaml.safe_load("".join(safe_data))["dataset_kwargs"]["cache_dir"]
+config = yaml.safe_load("".join(safe_data))
+dataset_path = config.get("dataset_path")
+cache_name = config["dataset_kwargs"]["cache_dir"]
+
+
+def _resolve_video_cache_dir():
+    candidates = []
+    if dataset_path:
+        local_dataset_path = os.path.expanduser(dataset_path)
+        if os.path.isdir(local_dataset_path):
+            candidates.append(os.path.join(local_dataset_path, cache_name))
+
+    hf_home = os.path.expanduser(os.getenv("HF_HOME", "~/.cache/huggingface/"))
+    candidates.append(os.path.join(hf_home, cache_name))
+
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    return candidates[0]
+
+
+video_cache_dir = _resolve_video_cache_dir()
 
 
 def parse_subtitle_time(time_str):
@@ -136,7 +153,7 @@ videomme_process_docs_long = partial(videmme_process_docs_base, type="long")
 
 
 def videomme_doc_to_visual(doc):
-    cache_dir = os.path.join(base_cache_dir, cache_name)
+    cache_dir = video_cache_dir
     video_path = doc["videoID"] + ".mp4"
     video_path = os.path.join(cache_dir, "data", video_path)
     if os.path.exists(video_path):
@@ -192,7 +209,7 @@ def videomme_doc_to_text_qwen3vl(doc, lmms_eval_specific_kwargs=None):
 
 
 def videomme_doc_to_text_subtitle(doc, lmms_eval_specific_kwargs=None):
-    cache_dir = os.path.join(base_cache_dir, cache_name)
+    cache_dir = video_cache_dir
     video_path = doc["videoID"] + ".mp4"
     video_path = os.path.join(cache_dir, "data", video_path)
     subtitle_path = os.path.join(cache_dir, "subtitle", doc["videoID"] + ".srt")

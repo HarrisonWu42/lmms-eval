@@ -1,4 +1,5 @@
-dataset_path: lmms-lab/MME
+# dataset_path: lmms-lab/MME
+dataset_path: /home/WuHao/datasets/lmms_eval_datasets/MME
 dataset_kwargs:
   token: True
 task: "mme"

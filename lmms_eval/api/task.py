@@ -1027,100 +1027,109 @@ class ConfigurableTask(Task):
                 return
 
             if "video" in dataset_kwargs and dataset_kwargs["video"]:
-                hf_home = os.getenv("HF_HOME", "~/.cache/huggingface/")
-                hf_home = os.path.expanduser(hf_home)
-                cache_dir = utils.resolve_cache_dir(dataset_kwargs["cache_dir"], base_dir=hf_home)
-                accelerator = Accelerator()
-                if accelerator.is_main_process:
-                    force_download = dataset_kwargs.get("force_download", False)
-                    force_unzip = dataset_kwargs.get("force_unzip", False)
-                    revision = dataset_kwargs.get("revision", "main")
-                    create_link = dataset_kwargs.get("create_link", False)
-                    cache_path = None
-                    # If the user already has a cache dir, we skip downloading archives.
-                    # Tasks that set create_link need the snapshot path even when the
-                    # cache dir already exists as a symlink from a previous run.
-                    if not os.path.exists(cache_dir) or (create_link and os.path.islink(cache_dir)):
-                        cache_path = snapshot_download(repo_id=self.DATASET_PATH, revision=revision, repo_type="dataset", force_download=force_download, etag_timeout=60)
-                        zip_files = glob(os.path.join(cache_path, "**/*.zip"), recursive=True)
-                        tar_files = glob(os.path.join(cache_path, "**/*.tar*"), recursive=True)
-                    else:
-                        zip_files = []
-                        tar_files = []
+                local_dataset_path = None
+                if isinstance(self.DATASET_PATH, str):
+                    candidate_dataset_path = os.path.expanduser(self.DATASET_PATH)
+                    if os.path.isdir(candidate_dataset_path):
+                        local_dataset_path = candidate_dataset_path
 
-                    def unzip_video_data(zip_file):
-                        import os
-                        import zipfile
+                if local_dataset_path is not None:
+                    eval_logger.info(f"Using local video dataset path {local_dataset_path}; skipping video package download.")
+                else:
+                    hf_home = os.getenv("HF_HOME", "~/.cache/huggingface/")
+                    hf_home = os.path.expanduser(hf_home)
+                    cache_dir = utils.resolve_cache_dir(dataset_kwargs["cache_dir"], base_dir=hf_home)
+                    accelerator = Accelerator()
+                    if accelerator.is_main_process:
+                        force_download = dataset_kwargs.get("force_download", False)
+                        force_unzip = dataset_kwargs.get("force_unzip", False)
+                        revision = dataset_kwargs.get("revision", "main")
+                        create_link = dataset_kwargs.get("create_link", False)
+                        cache_path = None
+                        # If the user already has a cache dir, we skip downloading archives.
+                        # Tasks that set create_link need the snapshot path even when the
+                        # cache dir already exists as a symlink from a previous run.
+                        if not os.path.exists(cache_dir) or (create_link and os.path.islink(cache_dir)):
+                            cache_path = snapshot_download(repo_id=self.DATASET_PATH, revision=revision, repo_type="dataset", force_download=force_download, etag_timeout=60)
+                            zip_files = glob(os.path.join(cache_path, "**/*.zip"), recursive=True)
+                            tar_files = glob(os.path.join(cache_path, "**/*.tar*"), recursive=True)
+                        else:
+                            zip_files = []
+                            tar_files = []
 
-                        with zipfile.ZipFile(zip_file, "r") as zip_ref:
-                            for file_info in zip_ref.infolist():
-                                target_path = os.path.join(cache_dir, file_info.filename)
-                                if not os.path.exists(target_path):
-                                    zip_ref.extract(file_info, cache_dir)
-                                else:
-                                    eval_logger.info(f"Skipping existing file: {target_path}")
+                        def unzip_video_data(zip_file):
+                            import os
+                            import zipfile
 
-                        eval_logger.info(f"Extracted all files from {zip_file} to {cache_dir}")
+                            with zipfile.ZipFile(zip_file, "r") as zip_ref:
+                                for file_info in zip_ref.infolist():
+                                    target_path = os.path.join(cache_dir, file_info.filename)
+                                    if not os.path.exists(target_path):
+                                        zip_ref.extract(file_info, cache_dir)
+                                    else:
+                                        eval_logger.info(f"Skipping existing file: {target_path}")
 
-                    def untar_video_data(tar_file):
-                        import tarfile
+                            eval_logger.info(f"Extracted all files from {zip_file} to {cache_dir}")
 
-                        with tarfile.open(tar_file, "r") as tar_ref:
-                            tar_ref.extractall(cache_dir)
-                            eval_logger.info(f"Extracted all files from {tar_file} to {cache_dir}")
+                        def untar_video_data(tar_file):
+                            import tarfile
 
-                    def concat_tar_parts(tar_parts, output_tar):
-                        with open(output_tar, "wb") as out_tar:
-                            from tqdm import tqdm
+                            with tarfile.open(tar_file, "r") as tar_ref:
+                                tar_ref.extractall(cache_dir)
+                                eval_logger.info(f"Extracted all files from {tar_file} to {cache_dir}")
 
-                            for part in tqdm(sorted(tar_parts)):
-                                with open(part, "rb") as part_file:
-                                    out_tar.write(part_file.read())
-                        eval_logger.info(f"Concatenated parts {tar_parts} into {output_tar}")
+                        def concat_tar_parts(tar_parts, output_tar):
+                            with open(output_tar, "wb") as out_tar:
+                                from tqdm import tqdm
 
-                    # Unzip zip files if needed
-                    if force_unzip or (not os.path.exists(cache_dir) and len(zip_files) > 0):
-                        for zip_file in zip_files:
-                            unzip_video_data(zip_file)
+                                for part in tqdm(sorted(tar_parts)):
+                                    with open(part, "rb") as part_file:
+                                        out_tar.write(part_file.read())
+                            eval_logger.info(f"Concatenated parts {tar_parts} into {output_tar}")
 
-                    # Concatenate and extract tar files if needed
-                    if force_unzip or (not os.path.exists(cache_dir) and len(tar_files) > 0):
-                        tar_parts_dict = {}
+                        # Unzip zip files if needed
+                        if force_unzip or (not os.path.exists(cache_dir) and len(zip_files) > 0):
+                            for zip_file in zip_files:
+                                unzip_video_data(zip_file)
 
-                        # Group tar parts together
-                        for tar_file in tar_files:
-                            base_name = tar_file.split(".tar")[0]
-                            base_name = re.sub(r"_\d+$", "", base_name)
-                            if base_name not in tar_parts_dict:
-                                tar_parts_dict[base_name] = []
-                            tar_parts_dict[base_name].append(tar_file)
+                        # Concatenate and extract tar files if needed
+                        if force_unzip or (not os.path.exists(cache_dir) and len(tar_files) > 0):
+                            tar_parts_dict = {}
 
-                        # Concatenate and untar split parts
-                        for base_name, parts in tar_parts_dict.items():
-                            eval_logger.info(f"Extracting following tar files: {parts}")
-                            output_tar = base_name + ".tar"
-                            if not os.path.exists(output_tar):
-                                eval_logger.info("Start concatenating tar files")
+                            # Group tar parts together
+                            for tar_file in tar_files:
+                                base_name = tar_file.split(".tar")[0]
+                                base_name = re.sub(r"_\d+$", "", base_name)
+                                if base_name not in tar_parts_dict:
+                                    tar_parts_dict[base_name] = []
+                                tar_parts_dict[base_name].append(tar_file)
 
-                                concat_tar_parts(parts, output_tar)
-                                eval_logger.info("Finish concatenating tar files")
+                            # Concatenate and untar split parts
+                            for base_name, parts in tar_parts_dict.items():
+                                eval_logger.info(f"Extracting following tar files: {parts}")
+                                output_tar = base_name + ".tar"
+                                if not os.path.exists(output_tar):
+                                    eval_logger.info("Start concatenating tar files")
 
-                            if not os.path.exists(os.path.join(cache_dir, os.path.basename(base_name))):
-                                untar_video_data(output_tar)
+                                    concat_tar_parts(parts, output_tar)
+                                    eval_logger.info("Finish concatenating tar files")
 
-                    # Link cache_path to cache_dir if needed.
-                    if create_link and cache_path is not None:
-                        if not os.path.exists(cache_dir) or os.path.islink(cache_dir):
-                            if os.path.islink(cache_dir):
-                                os.remove(cache_dir)
-                                eval_logger.info(f"Removed existing symbolic link: {cache_dir}")
-                            # Create a new symbolic link
-                            os.symlink(cache_path, cache_dir)
-                            eval_logger.info(f"Symbolic link created successfully: {cache_path} -> {cache_dir}")
+                                if not os.path.exists(os.path.join(cache_dir, os.path.basename(base_name))):
+                                    untar_video_data(output_tar)
 
-                accelerator.wait_for_everyone()
-                dataset_kwargs.pop("cache_dir")
-                dataset_kwargs.pop("video")
+                        # Link cache_path to cache_dir if needed.
+                        if create_link and cache_path is not None:
+                            if not os.path.exists(cache_dir) or os.path.islink(cache_dir):
+                                if os.path.islink(cache_dir):
+                                    os.remove(cache_dir)
+                                    eval_logger.info(f"Removed existing symbolic link: {cache_dir}")
+                                # Create a new symbolic link
+                                os.symlink(cache_path, cache_dir)
+                                eval_logger.info(f"Symbolic link created successfully: {cache_path} -> {cache_dir}")
+
+                    accelerator.wait_for_everyone()
+                dataset_kwargs.pop("cache_dir", None)
+                dataset_kwargs.pop("video", None)
 
             if "builder_script" in dataset_kwargs:
                 builder_script = dataset_kwargs["builder_script"]
@@ -1146,15 +1155,41 @@ class ConfigurableTask(Task):
         else:
             load_dataset_kwargs = dict(dataset_kwargs) if dataset_kwargs is not None else {}
             load_dataset_cache_dir = load_dataset_kwargs.pop("cache_dir", resolved_dataset_cache_dir)
-            self.dataset = datasets.load_dataset(
-                path=self.DATASET_PATH,
-                name=self.DATASET_NAME,
-                cache_dir=load_dataset_cache_dir,
-                download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
-                download_config=download_config,
-                num_proc=1,
-                **load_dataset_kwargs,
-            )
+            local_data_files = None
+            if isinstance(self.DATASET_PATH, str):
+                local_dataset_path = os.path.expanduser(self.DATASET_PATH)
+                local_config_path = os.path.join(local_dataset_path, self.DATASET_NAME) if self.DATASET_NAME is not None else local_dataset_path
+                if os.path.isdir(local_config_path):
+                    parquet_files = sorted(glob(os.path.join(local_config_path, "*.parquet")))
+                    if parquet_files:
+                        local_data_files = {}
+                        for parquet_file in parquet_files:
+                            split = os.path.basename(parquet_file).split("-")[0]
+                            local_data_files.setdefault(split, []).append(parquet_file)
+                        eval_logger.info(f"Loading local parquet dataset from {local_config_path}")
+
+            if local_data_files:
+                local_load_dataset_kwargs = dict(load_dataset_kwargs)
+                local_load_dataset_kwargs.pop("token", None)
+                self.dataset = datasets.load_dataset(
+                    path="parquet",
+                    data_files=local_data_files,
+                    cache_dir=load_dataset_cache_dir,
+                    download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
+                    download_config=download_config,
+                    num_proc=1,
+                    **local_load_dataset_kwargs,
+                )
+            else:
+                self.dataset = datasets.load_dataset(
+                    path=self.DATASET_PATH,
+                    name=self.DATASET_NAME,
+                    cache_dir=load_dataset_cache_dir,
+                    download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
+                    download_config=download_config,
+                    num_proc=1,
+                    **load_dataset_kwargs,
+                )
 
         if self.config.process_docs is not None:
             for split in self.dataset:
