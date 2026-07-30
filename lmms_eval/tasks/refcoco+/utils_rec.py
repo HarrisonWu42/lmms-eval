@@ -1,5 +1,7 @@
 import logging
 import re
+import json
+import math
 
 from datasets import Dataset
 
@@ -17,7 +19,9 @@ def refcoco_bbox_rec_preprocess_dataset(dataset: Dataset):
     # Convert to (top-left x, top-left y, bottom-right x, bottom-right y)
     # Normalize the bounding box coordinates to be between 0 and 1
     # using the image width and height
-    dataset = dataset.map(lambda x: {"bbox": [x["bbox"][0] / x["image_width"], x["bbox"][1] / x["image_height"], (x["bbox"][0] + x["bbox"][2]) / x["image_width"], (x["bbox"][1] + x["bbox"][3]) / x["image_height"]]})
+    dataset = dataset.map(lambda x: {"bbox": [x["bbox"][0] / x["image_width"], x["bbox"][1] / x["image_height"],
+                                              (x["bbox"][0] + x["bbox"][2]) / x["image_width"],
+                                              (x["bbox"][1] + x["bbox"][3]) / x["image_height"]]})
 
     # currently, the dataset has `answer` as a list of strings
     # each answer should be its own row
@@ -47,48 +51,105 @@ def refcoco_bbox_rec_doc_to_visual(doc):
 
 def refcoco_bbox_rec_doc_to_text(doc):
     assert isinstance(doc["answer"], str), "Answer must be a string"
-    return (
-        "Bounding box coordinates are specified in the format (top-left x, top-left y, bottom-right x, bottom-right y). All values are floating point numbers bounded between 0 and 1. Please provide the bounding box coordinate of the region this sentence describes: "
-        + doc["answer"]
-    )
+    return f'Please provide the bounding box coordinate of the region this sentence describes: {doc["answer"]}'
 
+
+# Locate {doc["answer"]} in the image and return the location in the form of coordinates in the format {{"bbox_2d": [x1, y1, x2, y2]}}
+# Please provide the bounding box coordinate of the region this sentence describes: {doc["answer"]}
 
 def parse_float_sequence_within(input_str):
-    """
-    Extract the first sequence of four floating-point numbers within square brackets from a string.
+    # 处理 JSON 代码块格式
+    if "```json" in input_str or "```" in input_str:
+        try:
+            if "```json" in input_str:
+                json_str = input_str.split("```json")[1].split("```")[0].strip()
+            else:
+                json_str = input_str.split("```")[1].split("```")[0].strip()
 
-    Args:
-    input_str (str): A string that may contain a sequence of four floats within square brackets.
+            data = json.loads(json_str)
 
-    Returns:
-    list: A list of four floats if the pattern is found, or a list of four zeros if the pattern is not found.
-    """
-    # Define the regex pattern to find the first instance of four floats within square brackets
-    pattern = r"\[\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\s*\]"
+            # 4 个数字的列表 [x1, y1, x2, y2]
+            if isinstance(data, list) and len(data) == 4 and all(isinstance(x, (int, float)) for x in data):
+                return [float(x) for x in data]
 
-    # Use re.search to find the first match of the pattern in the input string
-    match = re.search(pattern, input_str)
+            # 字典列表 [{"bbox_2d": [...]}]
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                if isinstance(item, dict) and "bbox_2d" in item:  # ✅ 先检查是否为 dict
+                    bbox = item["bbox_2d"]
+                    if len(bbox) == 4:
+                        return [float(x) for x in bbox]
 
-    # If a match is found, convert the captured groups into a list of floats
+            # 单个字典 {"bbox_2d": [...]}
+            elif isinstance(data, dict) and "bbox_2d" in data:
+                bbox = data["bbox_2d"]
+                if len(bbox) == 4:
+                    return [float(x) for x in bbox]
+
+        except (json.JSONDecodeError, ValueError, IndexError, KeyError):
+            pass
+
+    # 取 bbox_2d 数组
+    bbox_2d_pattern = r'"bbox_2d"\s*:\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]'
+    match = re.search(bbox_2d_pattern, input_str)
     if match:
         return [float(match.group(i)) for i in range(1, 5)]
 
-    # If the input does not contain the pattern, return the null float sequence
+    # 元组格式 (x1,y1),(x2,y2)
+    tuple_pattern = r'\((\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\)\s*,\s*\((\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\)'
+    match = re.search(tuple_pattern, input_str)
+    if match:
+        return [float(match.group(i)) for i in range(1, 5)]
+
+    # 标准数组格式 [x1, y1, x2, y2]
+    array_pattern = r"\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]"
+    match = re.search(array_pattern, input_str)
+    if match:
+        return [float(match.group(i)) for i in range(1, 5)]
+
+    # 提取前4个数字（兜底）
+    numbers = re.findall(r'\d+(?:\.\d+)?', input_str)
+    if len(numbers) >= 4:
+        coords = [float(numbers[i]) for i in range(4)]
+        if all(0 <= c <= 10000 for c in coords):
+            return coords
+
+    if input_str.strip():
+        eval_logger.debug(f"Failed to parse bbox from: {input_str[:200]}")
+
     return [0, 0, 0, 0]
 
 
 def refcoco_bbox_rec_process_result(doc, result):
-    """
-    Args:
-        doc: a instance of the eval dataset
-        results: [pred]
-    Returns:
-        a dictionary with key: metric name, value: metric value
-    """
     pred = result[0] if len(result) > 0 else ""
-    pred = parse_float_sequence_within(pred)
+    pred_bbox = parse_float_sequence_within(pred)
+    eval_logger.debug(f"Raw prediction: {pred_bbox}")
+
+    if pred_bbox != [0, 0, 0, 0]:
+        if max(pred_bbox) > 2:
+            orig_w = doc["image_width"]
+            orig_h = doc["image_height"]
+
+            pred_bbox = [
+                pred_bbox[0] / orig_w,
+                pred_bbox[1] / orig_h,
+                pred_bbox[2] / orig_w,
+                pred_bbox[3] / orig_h,
+            ]
+            eval_logger.debug(f"Normalized to [0,1]: {pred_bbox}")
+
+    pred_bbox = [max(0.0, min(1.0, x)) for x in pred_bbox]
+
+    eval_logger.debug(f"Final normalized bbox: {pred_bbox}")
+    eval_logger.debug(f"GT bbox: {doc['bbox']}")
+
     ann_id = doc["question_id"]
-    data_dict = {"answer": doc["answer"], "pred": pred, "ann_id": ann_id, "bbox": doc["bbox"]}
+    data_dict = {
+        "answer": doc["answer"],
+        "pred": pred_bbox,
+        "ann_id": ann_id,
+        "bbox": doc["bbox"]
+    }
     return {f"refcoco_{metric}": data_dict for metric in COCO_REC_METRICS}
 
 
@@ -120,7 +181,7 @@ def compute_iou(box1, box2):
     union_area = box1_area + box2_area - intersection_area
 
     # Compute the Intersection over Union
-    iou = intersection_area / union_area
+    iou = intersection_area / union_area if union_area > 0 else 0
 
     return iou
 
