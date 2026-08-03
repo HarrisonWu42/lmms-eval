@@ -1,0 +1,5 @@
+task: audiomarathon_librispeech_long
+dataset_kwargs:
+  data_files:
+    test: lmms_eval/tasks/audiomarathon/manifests/librispeech_long.jsonl
+include: _default_asr_yaml

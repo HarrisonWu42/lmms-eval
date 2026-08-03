@@ -1,0 +1,5 @@
+task: audiomarathon_voxceleb_gender
+dataset_kwargs:
+  data_files:
+    test: lmms_eval/tasks/audiomarathon/manifests/voxceleb_gender.jsonl
+include: _default_mcq_yaml
