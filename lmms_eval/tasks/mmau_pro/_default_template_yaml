@@ -1,0 +1,28 @@
+dataset_path: &dataset_path /home/WuHao/datasets/lmms_eval_datasets/MMAU-PRO
+dataset_kwargs:
+  token: True
+doc_to_target: "answer"
+doc_to_visual: !function utils.mmau_pro_doc_to_audio
+doc_to_text: !function utils.mmau_pro_doc_to_text
+generation_kwargs:
+  max_new_tokens: 512
+  do_sample: false
+lmms_eval_specific_kwargs:
+  default:
+    dataset_path: *dataset_path
+    pre_prompt: ""
+    mcq_post_prompt: "\nAnswer with the option's letter from the given choices directly."
+    open_post_prompt: "\nAnswer the question directly and concisely."
+
+process_results: !function utils.mmau_pro_process_results
+
+metric_list:
+  - metric: mmau_pro_mcq_accuracy
+    aggregation: !function utils.mmau_pro_aggregate_mcq_accuracy
+    higher_is_better: true
+  - metric: submission
+    aggregation: !function utils.mmau_pro_aggregate_submission
+    higher_is_better: true
+
+metadata:
+  version: 0.0

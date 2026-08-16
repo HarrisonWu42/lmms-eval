@@ -1,0 +1,10 @@
+task: "mmau_pro_test_mini"
+dataset_path: /home/LuBowen/datasets/lmms_eval_datasets/MMAU-PRO-mini
+test_split: test_mini.parquet
+
+metric_list:
+  - metric: mmau_pro_comprehensive
+    aggregation: !function utils.mmau_pro_aggregate_results
+    higher_is_better: true
+
+include: _default_template_yaml

@@ -1,0 +1,4 @@
+task: "mmau_pro"
+test_split: test.parquet
+
+include: _default_template_yaml

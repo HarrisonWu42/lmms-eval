@@ -1,0 +1,13 @@
+group: audiomarathon
+task:
+  - audiomarathon_alimeeting_summary
+  - audiomarathon_librispeech_long
+  - audiomarathon_race_audio
+  - audiomarathon_had
+  - audiomarathon_gtzan
+  - audiomarathon_tau
+  - audiomarathon_vesus
+  - audiomarathon_slue
+  - audiomarathon_desed
+  - audiomarathon_voxceleb_gender
+  - audiomarathon_voxceleb_age
