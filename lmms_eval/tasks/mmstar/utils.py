@@ -23,7 +23,13 @@ replace_prompt = " Please answer yes or no."
 
 
 def mmstar_doc_to_visual(doc):
-    return [doc["image"].convert("RGB")]
+    image = doc["image"]
+    if isinstance(image, (bytes, bytearray, memoryview)):
+        with Image.open(io.BytesIO(bytes(image))) as decoded:
+            image = decoded.convert("RGB")
+    else:
+        image = image.convert("RGB")
+    return [image]
 
 
 def mmstar_oc_doc_to_visual(doc):
