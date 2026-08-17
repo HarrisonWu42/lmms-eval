@@ -1,5 +1,9 @@
 task: "vqav2_val"
 include: _default_template_vqav2_yaml
+dataset_path: parquet
+dataset_kwargs:
+  data_files:
+    validation: /home/WuHao/datasets/lmms_eval_datasets/VQAv2/data/validation-*.parquet
 test_split: validation
 metric_list:
   - metric: exact_match
