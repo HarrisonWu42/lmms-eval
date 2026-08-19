@@ -1,28 +1,53 @@
+
 dataset_path: &dataset_path /home/WuHao/datasets/lmms_eval_datasets/MMAU-PRO
 dataset_kwargs:
-  token: True
-doc_to_target: "answer"
+  token: true
+
+doc_to_target: answer
 doc_to_visual: !function utils.mmau_pro_doc_to_audio
 doc_to_text: !function utils.mmau_pro_doc_to_text
+doc_to_choice: !function utils.mmau_pro_doc_to_choice
+
 generation_kwargs:
   max_new_tokens: 512
   do_sample: false
+
 lmms_eval_specific_kwargs:
   default:
     dataset_path: *dataset_path
+
+    # MMAU-compatible audio cache, used only if the dataset exposes an HF
+    # Audio dict instead of MMAU-Pro's persistent audio_path list.
+    audio_cache_subdir: _audio_cache
+
     pre_prompt: ""
-    mcq_post_prompt: "\nAnswer with the option's letter from the given choices directly."
-    open_post_prompt: "\nAnswer the question directly and concisely."
+    post_prompt: "\nAnswer with the option's letter from the given choices directly."
+    open_post_prompt: "\nAnswer the question directly."
+    instruction_post_prompt: ""
+
+    # Official MMAU-Pro evaluator models. They run locally through Transformers;
+    # no API endpoint or inference port is used.
+    qwen_judge_model: /home/WuHao/checkpoints/evaluators/Qwen2.5-7B-Instruct
+    nvembed_model: /home/WuHao/checkpoints/evaluators/NV-Embed-v2
+    judge_max_new_tokens: 512
+    judge_temperature: 0.1
+    # Match the official Qwen judge's torch.bfloat16 loading independently of
+    # the NV-Embed evaluator dtype below.
+    judge_dtype: bfloat16
+
+    # Generated answers are saved before evaluator loading, and lmms-eval's
+    # Qwen2.5-Omni cleanup is confirmed. The two evaluators then run on GPU in
+    # separate processes, one at a time; process exit releases each model.
+    evaluator_device: cuda
+    # Preserve NV-Embed's checkpoint dtype; the official script does not force
+    # the Qwen judge's torch.bfloat16 setting onto NV-Embed.
+    evaluator_dtype: auto
+
+    # Set the model fields above to local directories and switch this to true
+    # after Qwen2.5-7B-Instruct and NV-Embed-v2 have been downloaded.
+    evaluator_local_files_only: false
 
 process_results: !function utils.mmau_pro_process_results
-
-metric_list:
-  - metric: mmau_pro_mcq_accuracy
-    aggregation: !function utils.mmau_pro_aggregate_mcq_accuracy
-    higher_is_better: true
-  - metric: submission
-    aggregation: !function utils.mmau_pro_aggregate_submission
-    higher_is_better: true
 
 metadata:
   version: 0.0
