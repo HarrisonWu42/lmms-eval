@@ -1,5 +1,11 @@
 task: audiomarathon_vesus
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/vesus.jsonl
+    test: !function utils.VESUS_MANIFEST
+generation_kwargs:
+  max_new_tokens: 10
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
 include: _default_mcq_yaml

@@ -1,5 +1,5 @@
 task: audiomarathon_race_audio
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/race_audio.jsonl
+    test: !function utils.RACE_AUDIO_MANIFEST
 include: _default_mcq_yaml

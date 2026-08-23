@@ -1,5 +1,4 @@
 import json
-import random
 from collections import defaultdict
 from pathlib import Path
 
@@ -12,6 +11,11 @@ from lmms_eval.tasks._task_utils.file_utils import generate_submission_file
 
 DEFAULT_AUDIO_CACHE_DIR = Path("/tmp/lmms_eval_audio_cache/mmau")
 DEFAULT_AUDIO_CACHE_SUBDIR = "_audio_cache"
+
+
+def _choice_letters(choice_count):
+    """Return the valid answer letters for the current question."""
+    return [chr(ord("A") + index) for index in range(choice_count)]
 
 
 def _audio_cache_dir(lmms_eval_specific_kwargs=None):
@@ -45,14 +49,15 @@ def _audio_cache_file(doc, lmms_eval_specific_kwargs=None):
 def doc_to_audio(doc, lmms_eval_specific_kwargs=None):
     return [{"type": "audio", "url": _audio_cache_file(doc, lmms_eval_specific_kwargs)}]
 
+
 def doc_to_text(doc, lmms_eval_specific_kwargs):
-    letter = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
     pre_prompt = lmms_eval_specific_kwargs["pre_prompt"]
     post_prompt = lmms_eval_specific_kwargs["post_prompt"]
     question = doc["question"]
     choices = json.loads(doc["choices"])
-    choices = "\n".join([f"{letter[i]}. {choice}" for i, choice in enumerate(choices)])
-    return f"{pre_prompt}{question}\n{choices}{post_prompt}"
+    letters = _choice_letters(len(choices))
+    formatted_choices = "\n".join([f"{letter}. {choice}" for letter, choice in zip(letters, choices)])
+    return f"{pre_prompt}{question}\n{formatted_choices}{post_prompt}"
 
 
 def doc_to_choice(doc):
@@ -61,13 +66,15 @@ def doc_to_choice(doc):
 
 
 def mmau_process_results(doc, result):
-    letter = ["A", "B", "C", "D"]
-    response = parse_multi_choice_response(result[0], letter)
-    response = letter_to_ans(response, json.loads(doc["choices"]))
+    choices = json.loads(doc["choices"])
+    valid_letters = _choice_letters(len(choices))
+    raw_response = result[0] if result else ""
+    response_letter = parse_multi_choice_response(raw_response, valid_letters)
+    response = letter_to_ans(response_letter, choices)
     doc["model_prediction"] = response
-    response = response.strip().lower()
+    normalized_response = response.strip().lower()
     gt_ans = doc["answer"].strip().lower()
-    score = 1.0 if response == gt_ans else 0.0
+    score = 1.0 if response and normalized_response == gt_ans else 0.0
 
     return {"accuracy": {"overall": score, "task": doc["task"]}, "submission": {**doc}}
 
@@ -113,8 +120,10 @@ def mmau_aggregate_results_for_submission(results, args):
 def parse_multi_choice_response(response, all_choices):
     """
     Parse the prediction from the generated response.
-    Return the predicted choice letter e.g., A, B, C, D.
+    Return the predicted choice letter, or an empty string for an invalid answer.
     """
+    response = "" if response is None else str(response)
+
     # Clean response of unwanted characters
     for char in [",", ".", "!", "?", ";", ":", "'"]:
         response = response.strip(char)
@@ -138,9 +147,9 @@ def parse_multi_choice_response(response, all_choices):
             if f"{choice}." in response:
                 candidates.append(choice)
 
-    # If no candidates, randomly choose one
+    # If no candidates, keep the prediction invalid instead of guessing
     if len(candidates) == 0:
-        pred_index = random.choice(all_choices)
+        pred_index = ""
     elif len(candidates) > 1:
         # If more than one candidate, choose the last one found
         start_indexes = [response.rfind(f" {can} ") for can in candidates]
@@ -153,4 +162,10 @@ def parse_multi_choice_response(response, all_choices):
 
 
 def letter_to_ans(letter, choices):
-    return choices[ord(letter) - ord("A")]
+    if not isinstance(letter, str) or len(letter) != 1:
+        return ""
+
+    index = ord(letter.upper()) - ord("A")
+    if index < 0 or index >= len(choices):
+        return ""
+    return choices[index]

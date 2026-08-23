@@ -42,6 +42,10 @@ lmms_eval_specific_kwargs:
     # Preserve NV-Embed's checkpoint dtype; the official script does not force
     # the Qwen judge's torch.bfloat16 setting onto NV-Embed.
     evaluator_dtype: auto
+    # Optional Transformers device map used only by NV-Embed. The dedicated
+    # multi-GPU stage sets this to balanced while keeping Qwen Judge workers
+    # data-parallel and single-GPU.
+    nvembed_device_map: null
 
     # Set the model fields above to local directories and switch this to true
     # after Qwen2.5-7B-Instruct and NV-Embed-v2 have been downloaded.

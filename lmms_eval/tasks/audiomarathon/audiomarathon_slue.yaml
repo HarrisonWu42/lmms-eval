@@ -1,5 +1,5 @@
 task: audiomarathon_slue
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/slue.jsonl
+    test: !function utils.SLUE_MANIFEST
 include: _default_mcq_yaml

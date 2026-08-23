@@ -8,7 +8,7 @@ doc_to_text: !function utils.audiomarathon_doc_to_text_mcq
 doc_to_target: "answer"
 
 generation_kwargs:
-  max_new_tokens: 16
+  max_new_tokens: 5
   temperature: 0
   top_p: 1.0
   num_beams: 1
@@ -16,14 +16,20 @@ generation_kwargs:
 
 process_results: !function utils.audiomarathon_process_results_mcq
 metric_list:
+  - metric: audiomarathon_f1
+    aggregation: !function utils.audiomarathon_aggregate_f1
+    higher_is_better: true
   - metric: audiomarathon_acc
     aggregation: !function utils.audiomarathon_aggregate_acc
+    higher_is_better: true
+  - metric: audiomarathon_score
+    aggregation: !function utils.audiomarathon_aggregate_score_mcq
     higher_is_better: true
 
 lmms_eval_specific_kwargs:
   default:
     pre_prompt: ""
-    post_prompt: "Answer with only the option letter."
+    post_prompt: ""
 
 metadata:
-  version: 0.0
+  version: 1.0

@@ -1,5 +1,5 @@
 task: audiomarathon_voxceleb_age
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/voxceleb_age.jsonl
+    test: !function utils.VOXCELEB_AGE_MANIFEST
 include: _default_mcq_yaml

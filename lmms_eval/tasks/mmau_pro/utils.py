@@ -39,6 +39,7 @@ _EVALUATOR_CONFIG = {
     "evaluator_local_files_only": False,
     "evaluator_device": "cuda",
     "evaluator_dtype": "auto",
+    "nvembed_device_map": None,
     "judge_dtype": "bfloat16",
     "judge_max_new_tokens": 512,
     "judge_temperature": 0.1,
@@ -75,6 +76,7 @@ def _configure_evaluators(lmms_eval_specific_kwargs=None):
         "evaluator_local_files_only": os.getenv("MMAU_PRO_EVALUATOR_LOCAL_FILES_ONLY"),
         "evaluator_device": os.getenv("MMAU_PRO_EVALUATOR_DEVICE"),
         "evaluator_dtype": os.getenv("MMAU_PRO_EVALUATOR_DTYPE"),
+        "nvembed_device_map": os.getenv("MMAU_PRO_NVEMBED_DEVICE_MAP"),
         "judge_dtype": os.getenv("MMAU_PRO_JUDGE_DTYPE"),
         "judge_max_new_tokens": os.getenv("MMAU_PRO_JUDGE_MAX_NEW_TOKENS"),
         "judge_temperature": os.getenv("MMAU_PRO_JUDGE_TEMPERATURE"),
@@ -997,9 +999,15 @@ def _load_nvembed():
     model_name = _EVALUATOR_CONFIG["nvembed_model"]
     local_only = _as_bool(_EVALUATOR_CONFIG.get("evaluator_local_files_only"))
     device, load_kwargs = _evaluator_load_kwargs()
+    configured_device_map = _clean_text(
+        _EVALUATOR_CONFIG.get("nvembed_device_map")
+    )
+    if configured_device_map:
+        load_kwargs["device_map"] = configured_device_map
     eval_logger.info(
         f"Loading MMAU-Pro NV-Embed evaluator: {model_name}; "
-        f"device={device}, dtype={_EVALUATOR_CONFIG['evaluator_dtype']}"
+        f"device={device}, device_map={load_kwargs['device_map']}, "
+        f"dtype={_EVALUATOR_CONFIG['evaluator_dtype']}"
     )
     config = AutoConfig.from_pretrained(
         model_name,
@@ -1027,6 +1035,10 @@ def _load_nvembed():
         trust_remote_code=True,
         **load_kwargs,
     ).eval()
+    eval_logger.info(
+        f"MMAU-Pro NV-Embed actual hf_device_map: "
+        f"{getattr(model, 'hf_device_map', None)}"
+    )
     _patch_nvembed_for_current_transformers(model)
     return model
 
@@ -1260,6 +1272,7 @@ def _build_summary(results, return_sample_results=False):
             "nvembed_model": _EVALUATOR_CONFIG["nvembed_model"],
             "evaluator_device": _EVALUATOR_CONFIG["evaluator_device"],
             "evaluator_dtype": _EVALUATOR_CONFIG["evaluator_dtype"],
+            "nvembed_device_map": _EVALUATOR_CONFIG["nvembed_device_map"],
             "judge_dtype": _EVALUATOR_CONFIG["judge_dtype"],
         },
         "category_results": category_results,
