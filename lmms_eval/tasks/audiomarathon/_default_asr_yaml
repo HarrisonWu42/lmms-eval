@@ -8,7 +8,7 @@ doc_to_text: !function utils.audiomarathon_doc_to_text_asr
 doc_to_target: "transcript"
 
 generation_kwargs:
-  max_new_tokens: 4096
+  max_new_tokens: 1100
   temperature: 0
   top_p: 1.0
   num_beams: 1
@@ -17,8 +17,14 @@ generation_kwargs:
 process_results: !function utils.audiomarathon_process_results_asr
 metric_list:
   - metric: wer
-    aggregation: !function lmms_eval.tasks.librispeech.utils.librispeech_wer
+    aggregation: !function utils.audiomarathon_aggregate_wer
     higher_is_better: false
+  - metric: word_accuracy
+    aggregation: !function utils.audiomarathon_aggregate_word_accuracy
+    higher_is_better: true
+  - metric: audiomarathon_score
+    aggregation: !function utils.audiomarathon_aggregate_score_asr
+    higher_is_better: true
 
 lmms_eval_specific_kwargs:
   default:
@@ -26,4 +32,4 @@ lmms_eval_specific_kwargs:
     post_prompt: ""
 
 metadata:
-  version: 0.0
+  version: 1.0

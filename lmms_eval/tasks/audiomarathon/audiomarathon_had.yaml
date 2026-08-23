@@ -1,5 +1,5 @@
 task: audiomarathon_had
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/had.jsonl
+    test: !function utils.HAD_MANIFEST
 include: _default_mcq_yaml

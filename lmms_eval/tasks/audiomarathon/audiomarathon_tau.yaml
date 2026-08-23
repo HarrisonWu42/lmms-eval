@@ -1,5 +1,5 @@
 task: audiomarathon_tau
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/tau.jsonl
+    test: !function utils.TAU_MANIFEST
 include: _default_mcq_yaml

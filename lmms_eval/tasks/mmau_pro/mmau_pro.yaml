@@ -1,4 +1,9 @@
-task: "mmau_pro"
+task: mmau_pro
 test_split: test.parquet
 
+metric_list:
+  - metric: mmau_pro_comprehensive
+    aggregation: !function utils.mmau_pro_aggregate_results
+    higher_is_better: true
+# the evaluation of this one is put into three kinds
 include: _default_template_yaml

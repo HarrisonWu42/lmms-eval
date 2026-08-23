@@ -5,7 +5,6 @@ This module provides evaluation functions for the MMSU benchmark, which
 tests spoken language understanding and reasoning across 47 tasks.
 """
 
-import random
 from collections import defaultdict
 from pathlib import Path
 
@@ -225,7 +224,8 @@ def parse_multi_choice_response(response, all_choices, index2ans):
         index2ans: Dict mapping choice to answer text.
 
     Returns:
-        Predicted choice letter.
+        Predicted choice letter, or an empty string if no valid answer can be
+        found.
     """
     for char in [",", ".", "!", "?", ";", ":", "'"]:
         response = response.strip(char)
@@ -257,8 +257,8 @@ def parse_multi_choice_response(response, all_choices, index2ans):
                 candidates.append(index)
                 index_ans = False  # it's content ans.
 
-    if len(candidates) == 0:  # still not get answer, randomly choose one.
-        pred_index = random.choice(all_choices)
+    if len(candidates) == 0:
+        pred_index = ""
     elif len(candidates) > 1:
         start_indexes = []
         if index_ans:
@@ -311,7 +311,7 @@ def mmsu_process_results(doc, results):
     pred = parse_multi_choice_response(response, all_choices, index2ans)
 
     ground_truth = doc.get("answer", "A")
-    score = 1.0 if pred == ground_truth else 0.0
+    score = 1.0 if pred and pred == ground_truth else 0.0
 
     return {
         "accuracy": {

@@ -7,7 +7,6 @@ MMAR evaluates deep reasoning capabilities of Audio-Language Models across
 - 7 audio modalities: Sound, Music, Speech, and their combinations
 """
 
-import random
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -160,7 +159,8 @@ def parse_multi_choice_response(response: str, all_choices: List[str], index2ans
         index2ans: Mapping from choice letter to answer content.
 
     Returns:
-        Parsed answer letter (uppercased).
+        Parsed answer letter (uppercased), or an empty string if no valid
+        answer can be found.
     """
     response = response or ""
 
@@ -200,8 +200,8 @@ def parse_multi_choice_response(response: str, all_choices: List[str], index2ans
 
     # Determine final answer
     if len(candidates) == 0:
-        # No match found, randomly choose
-        pred_index = random.choice(all_choices)
+        # No match found: keep the prediction invalid instead of guessing
+        pred_index = ""
     elif len(candidates) > 1:
         # Multiple candidates: take the LAST occurrence
         start_indexes = []
@@ -248,7 +248,7 @@ def mmar_process_results(doc: Dict[str, Any], results: List[str]) -> Dict[str, D
     gt_answer = mmar_doc_to_target(doc)
 
     # Calculate score
-    score = 1.0 if parsed_answer == gt_answer else 0.0
+    score = 1.0 if parsed_answer and parsed_answer == gt_answer else 0.0
 
     return {
         "mmar_accuracy": {

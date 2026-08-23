@@ -1,6 +1,5 @@
 group: audiomarathon
 task:
-  - audiomarathon_alimeeting_summary
   - audiomarathon_librispeech_long
   - audiomarathon_race_audio
   - audiomarathon_had
@@ -11,3 +10,7 @@ task:
   - audiomarathon_desed
   - audiomarathon_voxceleb_gender
   - audiomarathon_voxceleb_age
+aggregate_metric_list:
+  - metric: audiomarathon_score
+    aggregation: mean
+    weight_by_size: false

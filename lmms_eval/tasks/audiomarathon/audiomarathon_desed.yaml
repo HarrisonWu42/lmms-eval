@@ -1,5 +1,5 @@
 task: audiomarathon_desed
 dataset_kwargs:
   data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/desed.jsonl
+    test: !function utils.DESED_MANIFEST
 include: _default_mcq_yaml

@@ -221,7 +221,10 @@ class Qwen2_5_Omni(lmms):
 
             # For better performance, please visit the Qwen-Omni repo to get the latest system prompt based on tasks.
             # https://github.com/QwenLM/Qwen2.5-Omni/tree/main/cookbooks
-            message = [{"role": "system", "content": [{"type": "text", "text": self.system_prompt}]}]
+            request_system_prompt = self.system_prompt
+            if visuals and isinstance(visuals[0], dict):
+                request_system_prompt = visuals[0].get("system_prompt", request_system_prompt)
+            message = [{"role": "system", "content": [{"type": "text", "text": request_system_prompt}]}]
             for i, context in enumerate(contexts):
                 if len(visuals) > 0:
                     visual = visuals[i] if i < len(visuals) else None

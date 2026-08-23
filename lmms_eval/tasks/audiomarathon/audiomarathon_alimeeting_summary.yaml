@@ -1,5 +1,0 @@
-task: audiomarathon_alimeeting_summary
-dataset_kwargs:
-  data_files:
-    test: lmms_eval/tasks/audiomarathon/manifests/alimeeting_summary.jsonl
-include: _default_summary_yaml

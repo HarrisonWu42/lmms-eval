@@ -1,9 +1,31 @@
 import argparse
+import glob
 import json
+import random
 from pathlib import Path
 
 TASK_DIR = Path(__file__).resolve().parent
 DEFAULT_OUT_DIR = TASK_DIR / "manifests"
+
+OFFICIAL_DATASET_REVISION = "ef00ea0458a57cb75b32d18ddb3b3619c4388fec"
+
+# Records evaluated by the official Qwen2.5-Omni baseline at the pinned Hub
+# revision.  The upstream scripts balance HAD and VoxCeleb gender with
+# random.seed(42), filter two speakers' happy VESUS examples, and skip missing
+# audio.  Consequently the evaluation protocol uses 5,774 records even though
+# the benchmark README describes 6,563 runnable records before these filters.
+EXPECTED_RECORD_COUNTS = {
+    "librispeech_long": 204,
+    "race_audio": 820,
+    "had": 630,
+    "gtzan": 120,
+    "tau": 1145,
+    "vesus": 178,
+    "slue": 490,
+    "desed": 254,
+    "voxceleb_gender": 976,
+    "voxceleb_age": 957,
+}
 
 
 def find_default_root():
@@ -75,36 +97,14 @@ def make_mcq_record(component, task_name, audio_path, question, choices, answer,
     return record
 
 
-def manifest_alimeeting(root):
-    source = root / "AliMeeting" / "meetingqa" / "Test_Ali_longform.json"
-    records = []
-    for item in read_json(source):
-        audio_rel = Path("AliMeeting") / item["audio_paths"][0]
-        if not exists(root, audio_rel):
-            continue
-        records.append(
-            {
-                "uniq_id": item["meeting_id"],
-                "meeting_id": item["meeting_id"],
-                "component": "AliMeeting",
-                "task_name": "Meeting summarization",
-                "audio_path": str(audio_rel),
-                "prompt": item["prompt"],
-                "reference_summary": item["reference_summary"],
-                "judge": item.get("judge", {}),
-            }
-        )
-    return records
-
-
 def manifest_librispeech(root):
-    base = root / "librispeech-long"
+    base = root / "librispeech-long" / "test-clean"
     records = []
-    for audio_path in sorted(base.glob("*/*/*/*.flac")):
+    for audio_path in sorted(base.glob("*/*/*.flac")):
         transcript_path = audio_path.with_suffix(".txt")
         if not transcript_path.exists():
             continue
-        split = audio_path.relative_to(base).parts[0]
+        split = base.name
         records.append(
             {
                 "uniq_id": f"{split}_{audio_path.stem}",
@@ -142,15 +142,31 @@ def manifest_race(root):
 
 
 def manifest_had(root):
-    data = read_json(root / "HAD" / "concatenated_audio" / "had_audio_classification_task.json")
     records = []
-    for item in data["samples"]:
-        audio_rel = Path("HAD") / "concatenated_audio" / item["path"]
-        if not exists(root, audio_rel):
-            continue
-        choices = choice_fields(item)
-        answer = normalize_gold(item, choices)
-        records.append(make_mcq_record("HAD", "Half-truth audio detection", audio_rel, item["question"], choices, answer, item["uniq_id"]))
+    base = root / "HAD" / "concatenated_audio"
+    choices = {"A": "real", "B": "fake"}
+    question = (
+        "Listen to this audio clip carefully. Is this audio completely authentic (real) "
+        "or does it contain any artificially synthesized segments (fake)? If it is "
+        "completely real, answer 'a'. If it contains any fake segments, answer 'b'. "
+        "Answer with only 'a' or 'b'."
+    )
+    for label, answer in (("real", "A"), ("fake", "B")):
+        # glob.glob intentionally matches the official loader's directory order.
+        for filename in glob.glob(str(base / label / "*.wav")):
+            audio_path = Path(filename)
+            audio_rel = audio_path.relative_to(root)
+            records.append(
+                make_mcq_record(
+                    "HAD",
+                    "Half-truth audio detection",
+                    audio_rel,
+                    question,
+                    choices,
+                    answer,
+                    audio_rel.with_suffix("").as_posix(),
+                )
+            )
     return records
 
 
@@ -185,9 +201,8 @@ def manifest_tau(root):
 
 
 def manifest_vesus(root):
-    source = root / "VESUS" / "audio_emotion_dataset_filtered.json"
-    data = read_json(source)
-    items = data["data"] if isinstance(data, dict) and "data" in data else data
+    source = root / "VESUS" / "audio_emotion_dataset.json"
+    items = read_json(source)
     records = []
     for item in items:
         audio_rel = Path("VESUS") / item["path"]
@@ -195,7 +210,18 @@ def manifest_vesus(root):
             continue
         choices = choice_fields(item)
         answer = normalize_gold(item, choices)
-        records.append(make_mcq_record("VESUS", "Emotion recognition", audio_rel, item["question"], choices, answer, item["uniq_id"]))
+        records.append(
+            make_mcq_record(
+                "VESUS",
+                "Emotion recognition",
+                audio_rel,
+                item["question"],
+                choices,
+                answer,
+                item["uniq_id"],
+                {"person_id": item.get("person_id"), "emotion_label": item.get("emotion_label", "")},
+            )
+        )
     return records
 
 
@@ -207,21 +233,33 @@ def manifest_slue(root):
             continue
         choices = choice_fields(item)
         answer = normalize_gold(item, choices)
-        records.append(make_mcq_record("SLUE", "Speech named entity reasoning", audio_rel, item["question"], choices, answer, item["uniq_id"]))
+        uniq_id = Path(item["path"]).with_suffix("").as_posix()
+        records.append(make_mcq_record("SLUE", "Speech named entity reasoning", audio_rel, item["question"], choices, answer, uniq_id))
     return records
 
 
 def manifest_desed(root):
     base = root / "DESED" / "DESED_dataset" / "concatenated_audio"
-    labels = sorted(path.name for path in base.iterdir() if path.is_dir() and not path.name.startswith("."))
-    choices = {chr(ord("A") + index): label.replace("_", " ") for index, label in enumerate(labels)}
+    source = base / "desed_sound_event_detection_task.json"
     records = []
-    for label in labels:
-        answer = chr(ord("A") + labels.index(label))
-        for audio_path in sorted((base / label).glob("*.wav")):
-            audio_rel = audio_path.relative_to(root)
-            question = "What sound event is represented in this audio segment?"
-            records.append(make_mcq_record("DESED", "Sound event detection", audio_rel, question, choices, answer, audio_path.stem, {"event_label": label}))
+    for item in read_json(source)["tasks"]:
+        audio_rel = Path("DESED") / "DESED_dataset" / "concatenated_audio" / item["path"]
+        if not exists(root, audio_rel):
+            continue
+        choices = {str(letter): str(value) for letter, value in item["choices"].items()}
+        answer = normalize_gold(item, choices)
+        records.append(
+            make_mcq_record(
+                "DESED",
+                "Sound event detection",
+                audio_rel,
+                item["question"],
+                choices,
+                answer,
+                item.get("uniq_id", Path(item["path"]).stem),
+                {"event_label": item.get("correct_event", item.get("primary_event", ""))},
+            )
+        )
     return records
 
 
@@ -260,7 +298,6 @@ def manifest_voxceleb_age(root):
 
 
 BUILDERS = {
-    "alimeeting_summary": manifest_alimeeting,
     "librispeech_long": manifest_librispeech,
     "race_audio": manifest_race,
     "had": manifest_had,
@@ -274,21 +311,76 @@ BUILDERS = {
 }
 
 
+def balanced_sample(records, labels, seed):
+    grouped = {label: [] for label in labels}
+    for record in records:
+        label = record["answer_text"].strip().lower()
+        if label in grouped:
+            grouped[label].append(record)
+
+    target = min(len(grouped[label]) for label in labels)
+    rng = random.Random(seed)
+    selected = []
+    for label in labels:
+        group = grouped[label]
+        selected.extend(rng.sample(group, target) if len(group) > target else group)
+    rng.shuffle(selected)
+    return selected
+
+
+def select_official_qwen_records(name, records, seed):
+    """Apply the sample selection in src/Qwen_2.5_Omni/Others."""
+    if name == "had":
+        return balanced_sample(records, ("real", "fake"), seed)
+    if name == "voxceleb_gender":
+        return balanced_sample(records, ("male", "female"), seed)
+    if name == "vesus":
+        return [
+            record
+            for record in records
+            if not (
+                str(record.get("person_id", "")).strip() in {"2", "10"}
+                and str(record.get("emotion_label", "")).strip().lower() == "happy"
+            )
+        ]
+    if name in {"tau", "voxceleb_age"}:
+        shuffled = list(records)
+        random.Random(seed).shuffle(shuffled)
+        return shuffled
+    return records
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Build AudioMarathon JSONL manifests for lmms-eval.")
+    parser = argparse.ArgumentParser(
+        description=f"Build official AudioMarathon JSONL manifests for lmms-eval ({OFFICIAL_DATASET_REVISION})."
+    )
     parser.add_argument("--root", type=Path, default=find_default_root(), help="Path to datasets/AudioMarathon.")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Output manifest directory.")
+    parser.add_argument("--seed", type=int, default=42, help="Official Qwen baseline sampling seed.")
     args = parser.parse_args()
 
     root = args.root.expanduser().resolve()
     if not root.exists():
         raise FileNotFoundError(f"AudioMarathon root does not exist: {root}")
 
+    stale_manifest = args.out_dir / "alimeeting_summary.jsonl"
+    if stale_manifest.exists():
+        stale_manifest.unlink()
+
+    total_records = 0
     for name, builder in BUILDERS.items():
-        records = builder(root)
+        records = select_official_qwen_records(name, builder(root), args.seed)
+        expected = EXPECTED_RECORD_COUNTS[name]
+        if len(records) != expected:
+            raise RuntimeError(
+                f"{name}: expected {expected} runnable records from official revision "
+                f"{OFFICIAL_DATASET_REVISION}, found {len(records)}"
+            )
         output = args.out_dir / f"{name}.jsonl"
         write_jsonl(output, records)
         print(f"{name}: wrote {len(records)} records to {output}")
+        total_records += len(records)
+    print(f"official Qwen evaluation total: {total_records}")
 
 
 if __name__ == "__main__":
