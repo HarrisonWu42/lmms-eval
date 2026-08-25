@@ -1,16 +1,16 @@
+import csv
 import random
 from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
-import pandas as pd
 import yaml
-from loguru import logger as eval_logger
 
 from lmms_eval.tasks._task_utils.video_loader import get_cache_dir, get_video
 
 OPTIONS = ["A", "B", "C", "D", "E"]
 
-with open(Path(__file__).parent / "_default_template_yaml", "r") as f:
+with open(Path(__file__).parent / "_default_template_yaml", "r", encoding="utf-8") as f:
     raw_data = f.readlines()
     safe_data = []
     for i, line in enumerate(raw_data):
@@ -20,34 +20,94 @@ with open(Path(__file__).parent / "_default_template_yaml", "r") as f:
 
     config = yaml.safe_load("".join(safe_data))
 
-if config["metadata"]["load_package"]:
-    try:
-        from pywsd.utils import lemmatize_sentence
-    except ImportError:
-        eval_logger.debug("pywsd not installed. Please install pywsd to use this module. You can install it by running 'pip install pywsd'")
 
+_OE_NLTK_RESOURCES = (
+    ("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger"),
+    ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
+    ("corpora/wordnet", "wordnet"),
+    ("corpora/omw-1.4", "omw-1.4"),
+    ("tokenizers/punkt", "punkt"),
+    ("tokenizers/punkt_tab", "punkt_tab"),
+)
+
+
+class NextQAOEDependencyError(RuntimeError):
+    """An existing local dependency required only by NExT-QA OE is absent."""
+
+
+class _NextQAOERuntime:
+    __slots__ = ("lemmatize_sentence", "wordnet", "word_tokenize", "stopwords")
+
+    def __init__(
+        self,
+        *,
+        lemmatize_sentence: Callable[[str], list[str]],
+        wordnet: Any,
+        word_tokenize: Callable[[str], list[str]],
+        stopwords: frozenset[str],
+    ) -> None:
+        self.lemmatize_sentence = lemmatize_sentence
+        self.wordnet = wordnet
+        self.word_tokenize = word_tokenize
+        self.stopwords = stopwords
+
+
+_oe_runtime: _NextQAOERuntime | None = None
+
+
+def _load_oe_runtime() -> _NextQAOERuntime:
+    """Load OE-only helpers from existing local resources, never by download."""
+
+    global _oe_runtime
+    if _oe_runtime is not None:
+        return _oe_runtime
     try:
         import nltk
         from nltk.corpus import wordnet
         from nltk.tokenize import word_tokenize
+    except ImportError as exc:
+        raise NextQAOEDependencyError(
+            "NExT-QA OE metrics require the existing nltk package; "
+            "package installation and downloads are disabled."
+        ) from exc
 
-        # nltk.set_proxy("http://127.0.0.1:6006")
-        def _ensure_nltk_resource(resource_path, package_name):
-            try:
-                nltk.data.find(resource_path)
-            except LookupError:
-                nltk.download(package_name, quiet=True)
+    missing = []
+    for resource_path, package_name in _OE_NLTK_RESOURCES:
+        try:
+            nltk.data.find(resource_path)
+        except LookupError:
+            missing.append(package_name)
+    if missing:
+        raise NextQAOEDependencyError(
+            "NExT-QA OE metrics are missing local NLTK resources: "
+            f"{', '.join(missing)}. Automatic downloads are disabled."
+        )
 
-        _ensure_nltk_resource("taggers/averaged_perceptron_tagger", "averaged_perceptron_tagger")
-        _ensure_nltk_resource("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng")
-        _ensure_nltk_resource("corpora/wordnet", "wordnet")
-        _ensure_nltk_resource("corpora/omw-1.4", "omw-1.4")
-        _ensure_nltk_resource("tokenizers/punkt", "punkt")
-        _ensure_nltk_resource("tokenizers/punkt_tab", "punkt_tab")
-    except ImportError:
-        eval_logger.debug("nltk not installed. Please install nltk to use this module. You can install it by running 'pip install nltk'")
+    try:
+        from pywsd.utils import lemmatize_sentence
+    except ImportError as exc:
+        raise NextQAOEDependencyError(
+            "NExT-QA OE metrics require the existing pywsd package; "
+            "package installation and downloads are disabled."
+        ) from exc
 
-stopwords = set(pd.read_csv(Path(__file__).parent / "stopwords.csv").squeeze())
+    with open(
+        Path(__file__).parent / "stopwords.csv", "r", encoding="utf-8", newline=""
+    ) as f:
+        rows = csv.DictReader(f)
+        if rows.fieldnames is None or "stopwords" not in rows.fieldnames:
+            raise RuntimeError("NExT-QA stopwords.csv is missing its stopwords column")
+        stopwords = frozenset(
+            value for row in rows if (value := row.get("stopwords", "").strip())
+        )
+    _oe_runtime = _NextQAOERuntime(
+        lemmatize_sentence=lemmatize_sentence,
+        wordnet=wordnet,
+        word_tokenize=word_tokenize,
+        stopwords=stopwords,
+    )
+    return _oe_runtime
+
 
 cache_dir = get_cache_dir(config, "NExTVideo")
 
@@ -58,9 +118,15 @@ def nextqa_doc_to_visual(doc):
 
 def nextqa_doc_to_text(doc, lmms_eval_specific_kwargs=None):
     question = doc["question"].strip()
-    if "pre_prompt" in lmms_eval_specific_kwargs and lmms_eval_specific_kwargs["pre_prompt"] != "":
+    if (
+        "pre_prompt" in lmms_eval_specific_kwargs
+        and lmms_eval_specific_kwargs["pre_prompt"] != ""
+    ):
         question = f"{lmms_eval_specific_kwargs['pre_prompt']}{question}"
-    if "post_prompt" in lmms_eval_specific_kwargs and lmms_eval_specific_kwargs["post_prompt"] != "":
+    if (
+        "post_prompt" in lmms_eval_specific_kwargs
+        and lmms_eval_specific_kwargs["post_prompt"] != ""
+    ):
         question = f"{question}{lmms_eval_specific_kwargs['post_prompt']}"
     return question
 
@@ -72,9 +138,15 @@ def nextqa_doc_to_text_mc(doc, lmms_eval_specific_kwargs=None):
     for i in range(5):
         question.append(f"{OPTIONS[i]}. {doc[f'a{i}'].strip()}")
     question = "\n".join(question)
-    if "pre_prompt" in lmms_eval_specific_kwargs and lmms_eval_specific_kwargs["pre_prompt"] != "":
+    if (
+        "pre_prompt" in lmms_eval_specific_kwargs
+        and lmms_eval_specific_kwargs["pre_prompt"] != ""
+    ):
         question = f"{lmms_eval_specific_kwargs['pre_prompt']}{question}"
-    if "post_prompt" in lmms_eval_specific_kwargs and lmms_eval_specific_kwargs["post_prompt"] != "":
+    if (
+        "post_prompt" in lmms_eval_specific_kwargs
+        and lmms_eval_specific_kwargs["post_prompt"] != ""
+    ):
         question = f"{question}{lmms_eval_specific_kwargs['post_prompt']}"
     return question
 
@@ -154,9 +226,10 @@ def nextqa_doc_to_target(doc):
 
 
 def remove_stop(sentence):
+    runtime = _load_oe_runtime()
     sentence.replace("</s>", "")  # video-llava
-    words = lemmatize_sentence(sentence)
-    words = [w for w in words if w not in stopwords]
+    words = runtime.lemmatize_sentence(sentence)
+    words = [w for w in words if w not in runtime.stopwords]
     return " ".join(words)
 
 
@@ -195,11 +268,12 @@ def wup(word1, word2, alpha):
     if word1 == word2:
         return 1.0
 
-    w1 = wordnet.synsets(word1)
+    runtime = _load_oe_runtime()
+    w1 = runtime.wordnet.synsets(word1)
     w1_len = len(w1)
     if w1_len == 0:
         return 0.0
-    w2 = wordnet.synsets(word2)
+    w2 = runtime.wordnet.synsets(word2)
     w2_len = len(w2)
     if w2_len == 0:
         return 0.0
@@ -246,8 +320,9 @@ def get_wups(pred, truth, alpha):
     :param truth:
     :return:
     """
-    pred = word_tokenize(pred)
-    truth = word_tokenize(truth)
+    runtime = _load_oe_runtime()
+    pred = runtime.word_tokenize(pred)
+    truth = runtime.word_tokenize(truth)
     item1 = wups(pred, truth, alpha)
     item2 = wups(truth, pred, alpha)
     value = min(item1, item2)
@@ -272,8 +347,12 @@ def nextqa_process_results(doc, results):
             cur_0 = 1 if pred_ans == gt_ans or pred_ans == add_ref_ans else 0
             cur_9 = cur_0
         else:
-            cur_0 = max(get_wups(pred_ans, gt_ans, 0), get_wups(pred_ans, add_ref_ans, 0))
-            cur_9 = max(get_wups(pred_ans, gt_ans, 0.9), get_wups(pred_ans, add_ref_ans, 0))
+            cur_0 = max(
+                get_wups(pred_ans, gt_ans, 0), get_wups(pred_ans, add_ref_ans, 0)
+            )
+            cur_9 = max(
+                get_wups(pred_ans, gt_ans, 0.9), get_wups(pred_ans, add_ref_ans, 0)
+            )
     else:
         if qtype == "DC" or qtype == "DB":
             cur_0 = 1 if pred_ans == gt_ans else 0

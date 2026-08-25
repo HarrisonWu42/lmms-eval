@@ -6,4 +6,5 @@ dataset_kwargs:
   cache_dir: nextqa
 metadata:
   version: 0.0.1
-  load_package: True
+  # OE-only packages/resources are checked lazily when an OE metric executes.
+  load_package: False
