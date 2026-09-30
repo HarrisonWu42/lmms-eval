@@ -1,0 +1,15 @@
+task: mmaunew3_test
+dataset_path: &dataset_path /Users/andylubowen/Desktop/MMAU-v05.15.25
+dataset_name: test
+dataset_kwargs:
+  local_files_only: true
+test_split: test.parquet
+process_docs: !function utils.mmaunew3_process_full_docs
+metric_list:
+  - metric: mmaunew3_submission
+    aggregation: !function utils.mmaunew3_aggregate_submission
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    dataset_path: *dataset_path
+include: _default_template_yaml

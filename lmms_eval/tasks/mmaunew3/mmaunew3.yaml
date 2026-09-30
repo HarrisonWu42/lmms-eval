@@ -1,0 +1,4 @@
+group: mmaunew3
+task:
+  - mmaunew3_test_mini
+  - mmaunew3_test

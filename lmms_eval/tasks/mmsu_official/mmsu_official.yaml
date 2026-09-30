@@ -1,0 +1,7 @@
+task: mmsu_official
+include: _default_template_yaml
+process_results: !function utils.mmsu_official_process_results
+metric_list:
+  - metric: mmsu_official_accuracy
+    aggregation: !function utils.mmsu_official_aggregate_results
+    higher_is_better: true

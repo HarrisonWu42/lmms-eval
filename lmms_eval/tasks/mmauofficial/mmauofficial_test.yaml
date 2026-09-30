@@ -1,0 +1,16 @@
+task: mmauofficial_test
+dataset_path: parquet
+dataset_kwargs:
+  data_files:
+    test: /Users/andylubowen/Desktop/MMAU-v05.15.25/test/test.parquet
+test_split: test
+# The released test answers are empty. Only the official service can score them.
+process_results: !function utils.mmauofficial_process_test_results
+metric_list:
+  - metric: mmauofficial_test_submission
+    aggregation: !function utils.mmauofficial_aggregate_test_submission
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    audio_dir: /Users/andylubowen/Desktop/MMAU-v05.15.25/test/test-audios
+include: _default_template_yaml
