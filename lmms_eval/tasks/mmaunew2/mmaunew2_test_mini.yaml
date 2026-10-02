@@ -1,0 +1,19 @@
+task: mmaunew2_test_mini
+dataset_path: /Users/andylubowen/Desktop/EIT-code/code/MLLM-Comp-Platform/third_party/frameworks/lmms-eval/lmms_eval/tasks/mmaunew2/mmaunew2_test_mini_dataset.py
+dataset_kwargs:
+  data_files:
+    test: /Users/andylubowen/Desktop/EIT-code/AudioMCQevaluator/mmau-test-mini.json
+  trust_remote_code: true
+test_split: test
+process_docs: !function utils.mmaunew2_process_docs
+metric_list:
+  - metric: mmaunew2_accuracy
+    aggregation: !function utils.mmaunew2_aggregate_results
+    higher_is_better: true
+  - metric: mmaunew2_submission
+    aggregation: !function utils.mmaunew2_aggregate_submission
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    audio_root: /Users/andylubowen/Desktop/EIT-code/AudioMCQevaluator
+include: _default_template_yaml

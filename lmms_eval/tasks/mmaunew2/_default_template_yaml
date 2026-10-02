@@ -1,0 +1,12 @@
+output_type: generate_until
+doc_to_visual: !function utils.mmaunew2_doc_to_audio
+doc_to_text: !function utils.mmaunew2_doc_to_text
+doc_to_messages: !function utils.mmaunew2_doc_to_messages
+doc_to_target: !function utils.mmaunew2_doc_to_target
+doc_to_choice: !function utils.mmaunew2_doc_to_choice
+generation_kwargs:
+  max_new_tokens: 256
+  do_sample: false
+process_results: !function utils.mmaunew2_process_results
+metadata:
+  version: 1.1

@@ -1,0 +1,26 @@
+task: mmauoffical2_test_mini
+# Reuse the original loader; only scoring and prediction export differ.
+dataset_path: /Users/andylubowen/Desktop/EIT-code/code/MLLM-Comp-Platform/third_party/frameworks/lmms-eval/lmms_eval/tasks/mmauofficial/mmauofficial_dataset.py
+dataset_kwargs:
+  data_files:
+    test: /Users/andylubowen/Desktop/EIT-code/AudioMCQevaluator/mmau-test-mini.json
+  trust_remote_code: true
+test_split: test
+process_results: !function utils.mmauoffical2_process_results
+metric_list:
+  - metric: mmauoffical2_accuracy
+    aggregation: !function utils.mmauoffical2_aggregate_results
+    higher_is_better: true
+  - metric: mmauoffical2_official_raw_accuracy
+    aggregation: !function utils.mmauoffical2_aggregate_results
+    higher_is_better: true
+  - metric: mmauoffical2_submission_accuracy
+    aggregation: !function utils.mmauoffical2_aggregate_results
+    higher_is_better: true
+  - metric: mmauoffical2_submission
+    aggregation: !function utils.mmauoffical2_aggregate_submission
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    audio_dir: /Users/andylubowen/Desktop/EIT-code/AudioMCQevaluator/test-mini-audios
+include: _default_template_yaml

@@ -1,0 +1,14 @@
+task: mmaunew_test_mini
+dataset_name: test-mini
+dataset_kwargs:
+  local_files_only: true
+  features: !function utils.MMAUNEW_TEST_MINI_FEATURES
+test_split: test_mini.parquet
+metric_list:
+  - metric: mmaunew_accuracy
+    aggregation: !function utils.mmaunew_aggregate_results
+    higher_is_better: true
+  - metric: mmaunew_submission
+    aggregation: !function utils.mmaunew_aggregate_submission
+    higher_is_better: true
+include: _default_template_yaml

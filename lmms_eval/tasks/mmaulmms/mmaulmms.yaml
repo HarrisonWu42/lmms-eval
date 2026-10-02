@@ -1,0 +1,4 @@
+group: mmaulmms
+task:
+  - mmaulmms_test_mini
+  - mmaulmms_test
