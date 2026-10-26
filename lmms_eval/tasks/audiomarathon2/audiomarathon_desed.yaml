@@ -1,0 +1,5 @@
+task: audiomarathon2_desed
+dataset_kwargs:
+  data_files:
+    test: !function utils.DESED_MANIFEST
+include: _default_mcq_yaml

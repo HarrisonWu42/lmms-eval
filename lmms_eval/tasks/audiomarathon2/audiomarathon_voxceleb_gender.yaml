@@ -1,0 +1,5 @@
+task: audiomarathon2_voxceleb_gender
+dataset_kwargs:
+  data_files:
+    test: !function utils.VOXCELEB_GENDER_MANIFEST
+include: _default_mcq_yaml

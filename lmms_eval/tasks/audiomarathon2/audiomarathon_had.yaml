@@ -1,0 +1,5 @@
+task: audiomarathon2_had
+dataset_kwargs:
+  data_files:
+    test: !function utils.HAD_MANIFEST
+include: _default_mcq_yaml

@@ -1,0 +1,22 @@
+group: audiomarathon2
+task:
+  - audiomarathon2_librispeech_long
+  - audiomarathon2_race_audio
+  - audiomarathon2_had
+  - audiomarathon2_gtzan
+  - audiomarathon2_tau
+  - audiomarathon2_vesus
+  - audiomarathon2_slue
+  - audiomarathon2_desed
+  - audiomarathon2_voxceleb_gender
+  - audiomarathon2_voxceleb_age
+aggregate_metric_list:
+  - metric: audiomarathon_acc
+    aggregation: mean
+    weight_by_size: true
+  - metric: audiomarathon_score
+    aggregation: mean
+    weight_by_size: true
+metadata:
+  version: 2.0
+  scoring: sample_weighted_accuracy

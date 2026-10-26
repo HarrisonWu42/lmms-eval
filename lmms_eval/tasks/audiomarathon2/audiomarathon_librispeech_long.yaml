@@ -1,0 +1,5 @@
+task: audiomarathon2_librispeech_long
+dataset_kwargs:
+  data_files:
+    test: !function utils.LIBRISPEECH_LONG_MANIFEST
+include: _default_asr_yaml

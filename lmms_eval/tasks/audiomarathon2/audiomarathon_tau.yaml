@@ -1,0 +1,5 @@
+task: audiomarathon2_tau
+dataset_kwargs:
+  data_files:
+    test: !function utils.TAU_MANIFEST
+include: _default_mcq_yaml

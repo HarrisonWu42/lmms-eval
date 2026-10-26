@@ -1,0 +1,5 @@
+task: audiomarathon2_slue
+dataset_kwargs:
+  data_files:
+    test: !function utils.SLUE_MANIFEST
+include: _default_mcq_yaml
