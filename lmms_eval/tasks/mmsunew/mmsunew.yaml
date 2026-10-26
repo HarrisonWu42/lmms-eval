@@ -1,6 +1,0 @@
-task: mmsunew
-include: _default_template_yaml
-metric_list:
-  - metric: mmsunew_accuracy
-    aggregation: !function utils.mmsunew_aggregate_results
-    higher_is_better: true
