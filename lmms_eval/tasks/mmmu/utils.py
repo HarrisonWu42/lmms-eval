@@ -30,11 +30,11 @@ with open(Path(__file__).parent / "_default_template_yaml", "r") as f:
 API_TYPE = os.getenv("API_TYPE", "openai")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "gpt-4o-2024-11-20")
 
-# Initialize the judge server
+# Standard MMMU scoring does not require an online judge.
 server_config = ServerConfig(
     model_name=MODEL_VERSION,
 )
-server = get_server(server_name=API_TYPE, config=server_config)
+server = None
 
 
 def replace_images_tokens(input_string):
@@ -175,6 +175,10 @@ def mmmu_process_results(doc, results):
 
 
 def mmmu_reasoning_process_results(doc, results):
+    global server
+    if server is None:
+        server = get_server(server_name=API_TYPE, config=server_config)
+
     parsed_preds = []
     scores = []
     for pred in results:
